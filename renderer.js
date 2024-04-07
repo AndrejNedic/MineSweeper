@@ -1,3 +1,5 @@
+import {Field, FieldState, Mine, UnknownFieldState} from "./field.js";
+
 export class Renderer {
     constructor(ctx, gameConfig, fieldPixelSize, fields) {
         this.ctx = ctx;
@@ -24,33 +26,82 @@ export class Renderer {
             ];
         }
 
-        for (let fRow of this.fields) {
-            for (let field of fRow) {
+        for(let row= 0; row < this.fields.length; row++)
+        {
+            for (let col = 0; col < this.fields[row].length; col++)
+            {
+                let field = this.fields[row][col];
                 const [leftUpper, rightLower] = translateFieldPos(field);
                 const fRenderer = new FieldRenderer(c => {
                     this.drawRect(leftUpper, rightLower, c)
+                    if(field.getState() === FieldState.Unveiled)
+                    {
+                        this.drawNumber(leftUpper, rightLower, Renderer.calculateMines(row, col, this.fields))
+                    }
                 });
                 field.renderOnField(fRenderer, new Hitbox(leftUpper, rightLower));
             }
         }
     }
 
+    static calculateMines(row, col, fields) {
+        const directions = [
+            { row: -1, col: -1 }, { row: -1, col: 0 }, { row: -1, col: 1 },
+            { row: 0, col: -1 },                        { row: 0, col: 1 },
+            { row: 1, col: -1 },  { row: 1, col: 0 },   { row: 1, col: 1 }
+        ];
+
+        let mineCount = 0;
+
+        directions.forEach(direction => {
+            const newRow = row + direction.row;
+            const newCol = col + direction.col;
+
+            if (Renderer.isValidCoordinate(fields, newRow, newCol) && fields[newRow][newCol] instanceof Mine) {
+                mineCount++;
+            }
+        });
+
+        return mineCount;
+    }
+
+    static isValidCoordinate(fields, row, col) {
+        return row >= 0 && row < fields.length && col >= 0 && col < fields[0].length;
+    }
+
+
+    static validateCoordinate(maxRow, maxCol, row, col)
+    {
+        return !(row < 0 || row > maxRow || col < 0 || col > maxCol);
+    }
+
+    drawNumber(leftUpper, rightLower, number)
+    {
+        this.ctx.font = "30px Arial";
+        this.ctx.fillStyle = "black";
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText(number, leftUpper.x + leftUpper.horizontalDistanceTo(rightLower) / 2, leftUpper.y + leftUpper.verticalDistanceTo(rightLower) / 2);
+    }
+
     drawGrid() {
+        const drawLineAndShift = (start, end, shiftFunc) => {
+            this.drawLine(start, end);
+            start = shiftFunc(start);
+            end = shiftFunc(end);
+            return [start, end];
+        }
+
         const gap = this.fieldPixelSize / this.gameConfig.fieldSize;
         const origin = new Position(0, 0);
         let start = origin;
         let end = start.moveY(this.fieldPixelSize);
         for (let i = 0; i <= this.gameConfig.fieldSize; i++) {
-            this.drawLine(start, end);
-            start = start.moveX(gap);
-            end = end.moveX(gap);
+            [start, end] = drawLineAndShift(start, end, (position) => {return position.moveX(gap)});
         }
         start = origin;
         end = start.moveX(this.fieldPixelSize);
         for (let i = 0; i <= this.gameConfig.fieldSize; i++) {
-            this.drawLine(start, end);
-            start = start.moveY(gap);
-            end = end.moveY(gap);
+            [start, end] = drawLineAndShift(start, end, (position) => {return position.moveY(gap)});
         }
     }
 
@@ -73,6 +124,7 @@ export class Renderer {
         this.ctx.fill();
     }
 }
+
 export class FieldRenderer {
     constructor(draw) {
         this.draw = draw;
@@ -84,23 +136,23 @@ export class FieldRenderer {
             case FieldState.Hidden:
             {
                 color = 'grey';
-            }
                 break;
+            }
             case FieldState.Unveiled:
             {
                 color = 'white';
-            }
                 break;
+            }
             case FieldState.Flagged:
             {
                 color = 'blue';
-            }
                 break;
+            }
             case FieldState.Detonated:
             {
                 color = 'red';
-            }
                 break;
+            }
             default: {
                 throw new UnknownFieldState(state);
             }
@@ -108,6 +160,7 @@ export class FieldRenderer {
         this.draw(color);
     }
 }
+
 export class Hitbox {
     constructor(leftUpper, rightLower) {
         this.leftUpper = leftUpper;
@@ -123,6 +176,7 @@ export class Hitbox {
         );
     }
 }
+
 export class Position {
     constructor(x, y) {
         this.x = x;
